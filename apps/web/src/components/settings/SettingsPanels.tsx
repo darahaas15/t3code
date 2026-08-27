@@ -529,6 +529,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.addProjectBaseDirectory !== DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory
         ? ["Add project base directory"]
         : []),
+      ...(settings.terminalAutoFocus !== DEFAULT_UNIFIED_SETTINGS.terminalAutoFocus
+        ? ["Terminal auto-focus"]
+        : []),
       ...(settings.confirmThreadArchive !== DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive
         ? ["Archive confirmation"]
         : []),
@@ -557,6 +560,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
       settings.addProjectBaseDirectory,
+      settings.terminalAutoFocus,
       settings.defaultThreadEnvMode,
       settings.newWorktreesStartFromOrigin,
       settings.diffIgnoreWhitespace,
@@ -668,6 +672,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       defaultThreadEnvMode: DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode,
       newWorktreesStartFromOrigin: DEFAULT_UNIFIED_SETTINGS.newWorktreesStartFromOrigin,
       addProjectBaseDirectory: DEFAULT_UNIFIED_SETTINGS.addProjectBaseDirectory,
+      terminalAutoFocus: DEFAULT_UNIFIED_SETTINGS.terminalAutoFocus,
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
@@ -2316,6 +2321,30 @@ export function GeneralSettingsPanel() {
               placeholder="~/"
               spellCheck={false}
               aria-label="Add project base directory"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("terminal-auto-focus")}
+          description="Move focus into the terminal when it opens and when you switch to a thread whose terminal is open. When off, the terminal only takes focus when you click it."
+          resetAction={
+            settings.terminalAutoFocus !== DEFAULT_UNIFIED_SETTINGS.terminalAutoFocus ? (
+              <SettingResetButton
+                label="terminal auto-focus"
+                onClick={() =>
+                  updateSettings({
+                    terminalAutoFocus: DEFAULT_UNIFIED_SETTINGS.terminalAutoFocus,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.terminalAutoFocus}
+              onCheckedChange={(checked) => updateSettings({ terminalAutoFocus: Boolean(checked) })}
+              aria-label="Terminal auto-focus"
             />
           }
         />

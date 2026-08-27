@@ -402,6 +402,11 @@ export function TerminalViewport({
       terminal: settings.fontSizeTerminal,
     }),
   );
+  const terminalAutoFocus = useClientSettings((settings) => settings.terminalAutoFocus);
+  // Every automatic focus path gates on this; a click still focuses the
+  // terminal directly, so turning the setting off keeps focus wherever the
+  // user left it (usually the composer, so thread shortcuts keep working).
+  const shouldAutoFocus = autoFocus && terminalAutoFocus;
   const terminalFontRef = useRef({ family: terminalFontFamily, size: terminalFontSize });
   const terminalSession = useAttachedTerminalSession({
     environmentId,
@@ -526,7 +531,7 @@ export function TerminalViewport({
       // never started, so only "exited" triggers the message — as with xterm.)
       synchronizedStatusRef.current = "closed";
       synchronizeTerminalStatus(terminal, latestSession.status);
-      if (autoFocus) window.requestAnimationFrame(() => terminal.focus());
+      if (shouldAutoFocus) window.requestAnimationFrame(() => terminal.focus());
 
       const clearSelectionAction = () => {
         selectionActionRequestIdRef.current += 1;
@@ -903,7 +908,7 @@ export function TerminalViewport({
       cancelled = true;
       teardown?.();
     };
-    // autoFocus is intentionally omitted;
+    // shouldAutoFocus is intentionally omitted;
     // it is only read at mount time and must not trigger terminal teardown/recreation.
   }, [cwd, environmentId, runtimeEnvKey, terminalId, threadId, worktreePath]);
 
@@ -940,16 +945,16 @@ export function TerminalViewport({
       writeSystemMessage(terminal, current.error);
     }
 
-    if (previous.version === 0 && autoFocus) {
+    if (previous.version === 0 && shouldAutoFocus) {
       window.requestAnimationFrame(() => {
         terminal.focus();
       });
     }
     previousSessionRef.current = current;
-  }, [autoFocus, terminalBuffer, terminalError, terminalStatus, terminalVersion]);
+  }, [shouldAutoFocus, terminalBuffer, terminalError, terminalStatus, terminalVersion]);
 
   useEffect(() => {
-    if (!autoFocus) return;
+    if (!shouldAutoFocus) return;
     const terminal = terminalRef.current;
     if (!terminal) return;
     const frame = window.requestAnimationFrame(() => {
@@ -958,7 +963,7 @@ export function TerminalViewport({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [autoFocus, focusRequestId]);
+  }, [shouldAutoFocus, focusRequestId]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
