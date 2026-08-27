@@ -727,7 +727,6 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
   keybindings,
   onAddTerminalContext,
 }: PersistentThreadTerminalDrawerProps) {
-  const terminalAutoFocus = useClientSettings((settings) => settings.terminalAutoFocus);
   const openTerminal = useAtomCommand(terminalEnvironment.open, "terminal open");
   const writeTerminal = useAtomCommand(terminalEnvironment.write, "terminal write");
   const closeTerminalMutation = useAtomCommand(terminalEnvironment.close, "terminal close");
@@ -1045,13 +1044,13 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
         activeTerminalId={terminalUiState.activeTerminalId}
         terminalGroups={terminalUiState.terminalGroups}
         activeTerminalGroupId={terminalUiState.activeTerminalGroupId}
-        // The visible term turns thread activation and drawer reveal into a
-        // focus request; those are automatic reveals, so the terminalAutoFocus
-        // setting gates them. Action-driven bumps (localFocusRequestId and the
-        // ChatView-level requests) stay ungated.
-        focusRequestId={
-          focusRequestId + localFocusRequestId + (visible && terminalAutoFocus ? 1 : 0)
-        }
+        // Carries only explicit, action-driven focus requests. Reveal focus
+        // (thread activation, drawer open) is the viewport's own visible
+        // transition, checked against the terminalAutoFocus setting at frame
+        // time - encoding visibility or the setting into this id would turn
+        // their transitions (including async settings hydration) into spoofed
+        // requests.
+        focusRequestId={focusRequestId + localFocusRequestId}
         onSplitTerminal={splitTerminal}
         onSplitTerminalVertical={splitTerminalVertical}
         onNewTerminal={createNewTerminal}

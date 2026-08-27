@@ -324,6 +324,7 @@ interface TerminalViewportProps {
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   focusRequestId: number;
   autoFocus: boolean;
+  visible: boolean;
   mountFocusPending: boolean;
   resizeEpoch: number;
   drawerHeight: number;
@@ -349,6 +350,7 @@ export function TerminalViewport({
   onAddTerminalContext,
   focusRequestId,
   autoFocus,
+  visible,
   mountFocusPending,
   resizeEpoch,
   drawerHeight,
@@ -417,6 +419,7 @@ export function TerminalViewport({
   // document.body when the previously focused viewport unmounts.
   const mountFocusPendingRef = useRef(mountFocusPending);
   const latestFocusRequestIdRef = useRef(focusRequestId);
+  const previousVisibleRef = useRef(visible);
   // Effect event so queued focus callbacks read the live values at frame
   // time: settings hydrate asynchronously after mount, and a toggle between
   // scheduling and firing must win over the captured render.
@@ -998,6 +1001,24 @@ export function TerminalViewport({
       window.cancelAnimationFrame(frame);
     };
   }, [autoFocus, focusRequestId]);
+
+  useEffect(() => {
+    const wasVisible = previousVisibleRef.current;
+    previousVisibleRef.current = visible;
+    // Reveal focus (thread activation, drawer open) is the automatic channel:
+    // it acts only on a hidden-to-visible transition, and the frame-time
+    // permission check honors the terminalAutoFocus setting. Mount-time focus
+    // belongs to the surface setup path (the terminal is not ready here yet).
+    if (wasVisible || !visible) return;
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    const frame = window.requestAnimationFrame(() => {
+      focusTerminalIfPermitted(terminal);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [visible]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -1591,6 +1612,7 @@ export default function ThreadTerminalDrawer({
                           onAddTerminalContext={onAddTerminalContext}
                           focusRequestId={focusRequestId}
                           autoFocus={visible && terminalId === resolvedActiveTerminalId}
+                          visible={visible}
                           mountFocusPending={mountFocusPending}
                           resizeEpoch={resizeEpoch}
                           drawerHeight={drawerHeight}
@@ -1621,6 +1643,7 @@ export default function ThreadTerminalDrawer({
                   onAddTerminalContext={onAddTerminalContext}
                   focusRequestId={focusRequestId}
                   autoFocus={visible}
+                  visible={visible}
                   mountFocusPending={mountFocusPending}
                   resizeEpoch={resizeEpoch}
                   drawerHeight={drawerHeight}
