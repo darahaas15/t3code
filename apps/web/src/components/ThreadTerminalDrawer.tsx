@@ -553,7 +553,12 @@ export function TerminalViewport({
       // never started, so only "exited" triggers the message — as with xterm.)
       synchronizedStatusRef.current = "closed";
       synchronizeTerminalStatus(terminal, latestSession.status);
-      const focusFrame = window.requestAnimationFrame(() => focusTerminalIfPermitted(terminal));
+      const focusFrame = window.requestAnimationFrame(() => {
+        focusTerminalIfPermitted(terminal);
+        // The mount-time grant covers only this first ready frame; keeping it
+        // alive would let a later automatic reveal spend it with the setting off.
+        mountFocusPendingRef.current = false;
+      });
       setupCleanups.push(() => window.cancelAnimationFrame(focusFrame));
 
       const clearSelectionAction = () => {
