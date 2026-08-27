@@ -324,6 +324,7 @@ interface TerminalViewportProps {
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   focusRequestId: number;
   autoFocus: boolean;
+  mountFocusPending: boolean;
   resizeEpoch: number;
   drawerHeight: number;
   keybindings: ResolvedKeybindingsConfig;
@@ -348,6 +349,7 @@ export function TerminalViewport({
   onAddTerminalContext,
   focusRequestId,
   autoFocus,
+  mountFocusPending,
   resizeEpoch,
   drawerHeight,
   keybindings,
@@ -403,10 +405,27 @@ export function TerminalViewport({
     }),
   );
   const terminalAutoFocus = useClientSettings((settings) => settings.terminalAutoFocus);
-  // Every automatic focus path gates on this; a click still focuses the
-  // terminal directly, so turning the setting off keeps focus wherever the
-  // user left it (usually the composer, so thread shortcuts keep working).
+  // Automatic focus (surface ready, first output) honors the terminalAutoFocus
+  // setting; explicit focus requests honor only autoFocus, so terminal actions
+  // keep working with the setting off. A click still focuses the terminal
+  // directly either way.
   const shouldAutoFocus = autoFocus && terminalAutoFocus;
+  // Captured once at mount and consumed by the first focus it grants: a
+  // viewport mounted by the same render as an explicit focus request (the
+  // single-terminal view remounts on create/close/activate) must focus once
+  // ready even when terminalAutoFocus is off, otherwise focus falls to
+  // document.body when the previously focused viewport unmounts.
+  const mountFocusPendingRef = useRef(mountFocusPending);
+  const latestFocusRequestIdRef = useRef(focusRequestId);
+  // Effect event so queued focus callbacks read the live values at frame
+  // time: settings hydrate asynchronously after mount, and a toggle between
+  // scheduling and firing must win over the captured render.
+  const focusTerminalIfPermitted = useEffectEvent((terminal: GhosttyTerminalSurface) => {
+    if (shouldAutoFocus || (autoFocus && mountFocusPendingRef.current)) {
+      terminal.focus();
+      mountFocusPendingRef.current = false;
+    }
+  });
   const terminalFontRef = useRef({ family: terminalFontFamily, size: terminalFontSize });
   const terminalSession = useAttachedTerminalSession({
     environmentId,
@@ -531,7 +550,8 @@ export function TerminalViewport({
       // never started, so only "exited" triggers the message — as with xterm.)
       synchronizedStatusRef.current = "closed";
       synchronizeTerminalStatus(terminal, latestSession.status);
-      if (shouldAutoFocus) window.requestAnimationFrame(() => terminal.focus());
+      const focusFrame = window.requestAnimationFrame(() => focusTerminalIfPermitted(terminal));
+      setupCleanups.push(() => window.cancelAnimationFrame(focusFrame));
 
       const clearSelectionAction = () => {
         selectionActionRequestIdRef.current += 1;
@@ -908,8 +928,9 @@ export function TerminalViewport({
       cancelled = true;
       teardown?.();
     };
-    // shouldAutoFocus is intentionally omitted;
-    // it is only read at mount time and must not trigger terminal teardown/recreation.
+    // Focus permission is intentionally not a dependency: it is checked at
+    // frame time inside focusTerminalIfPermitted, and changing it must not
+    // trigger terminal teardown/recreation.
   }, [cwd, environmentId, runtimeEnvKey, terminalId, threadId, worktreePath]);
 
   useEffect(() => {
@@ -945,16 +966,29 @@ export function TerminalViewport({
       writeSystemMessage(terminal, current.error);
     }
 
-    if (previous.version === 0 && shouldAutoFocus) {
+    if (previous.version === 0) {
+      // No cancel on cleanup here: this effect re-runs on every buffer
+      // update, and cancelling would drop a legitimate first-output focus
+      // when a second write lands within the same frame. The frame-time
+      // permission check makes a stale grant impossible instead.
       window.requestAnimationFrame(() => {
-        terminal.focus();
+        focusTerminalIfPermitted(terminal);
       });
     }
     previousSessionRef.current = current;
-  }, [shouldAutoFocus, terminalBuffer, terminalError, terminalStatus, terminalVersion]);
+  }, [terminalBuffer, terminalError, terminalStatus, terminalVersion]);
 
   useEffect(() => {
-    if (!shouldAutoFocus) return;
+    const previous = latestFocusRequestIdRef.current;
+    latestFocusRequestIdRef.current = focusRequestId;
+    // Explicit focus requests (terminal create/split/close/tab activation)
+    // are honored regardless of the terminalAutoFocus setting: suppressing
+    // them would drop keyboard focus on document.body when the previously
+    // focused viewport unmounts. Only an actual request may focus, so runs
+    // without a changed id (mount, autoFocus flips on reveal) bail out;
+    // those transitions belong to the gated automatic paths.
+    if (focusRequestId === previous) return;
+    if (!autoFocus) return;
     const terminal = terminalRef.current;
     if (!terminal) return;
     const frame = window.requestAnimationFrame(() => {
@@ -963,7 +997,7 @@ export function TerminalViewport({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [shouldAutoFocus, focusRequestId]);
+  }, [autoFocus, focusRequestId]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -1080,6 +1114,16 @@ export default function ThreadTerminalDrawer({
   terminalLaunchLocationsById,
 }: ThreadTerminalDrawerProps) {
   const isPanel = mode === "panel";
+  // True exactly on renders carrying a new focus request. A viewport mounted
+  // by such a render (the single-terminal view remounts on create/close/
+  // activate) captures it so the request survives the remount: the new
+  // viewport's focusRequestId effect cannot act on the change because its
+  // terminal surface is not ready yet.
+  const previousFocusRequestIdRef = useRef(focusRequestId);
+  const mountFocusPending = focusRequestId !== previousFocusRequestIdRef.current;
+  useEffect(() => {
+    previousFocusRequestIdRef.current = focusRequestId;
+  }, [focusRequestId]);
   const [advancedTypography] = useLocalStorage(
     TYPOGRAPHY_ADVANCED_STORAGE_KEY,
     false,
@@ -1546,7 +1590,8 @@ export default function ThreadTerminalDrawer({
                           onSessionExited={() => onCloseTerminal(terminalId)}
                           onAddTerminalContext={onAddTerminalContext}
                           focusRequestId={focusRequestId}
-                          autoFocus={terminalId === resolvedActiveTerminalId}
+                          autoFocus={visible && terminalId === resolvedActiveTerminalId}
+                          mountFocusPending={mountFocusPending}
                           resizeEpoch={resizeEpoch}
                           drawerHeight={drawerHeight}
                           keybindings={keybindings}
@@ -1575,7 +1620,8 @@ export default function ThreadTerminalDrawer({
                   onSessionExited={() => onCloseTerminal(resolvedActiveTerminalId)}
                   onAddTerminalContext={onAddTerminalContext}
                   focusRequestId={focusRequestId}
-                  autoFocus
+                  autoFocus={visible}
+                  mountFocusPending={mountFocusPending}
                   resizeEpoch={resizeEpoch}
                   drawerHeight={drawerHeight}
                   keybindings={keybindings}

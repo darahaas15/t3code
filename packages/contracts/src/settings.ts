@@ -254,7 +254,8 @@ export const ClientSettingsSchema = Schema.Struct({
   // Whether the embedded terminal takes keyboard focus on its own: when it
   // opens, and when switching to a thread whose terminal is open. Off keeps
   // focus in the chat composer (thread navigation shortcuts keep working);
-  // clicking the terminal still focuses it.
+  // direct interaction - clicking the terminal, or creating/activating one
+  // from its own UI - still focuses it.
   terminalAutoFocus: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   timestampFormat: TimestampFormat.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),

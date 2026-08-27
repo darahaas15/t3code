@@ -727,6 +727,7 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
   keybindings,
   onAddTerminalContext,
 }: PersistentThreadTerminalDrawerProps) {
+  const terminalAutoFocus = useClientSettings((settings) => settings.terminalAutoFocus);
   const openTerminal = useAtomCommand(terminalEnvironment.open, "terminal open");
   const writeTerminal = useAtomCommand(terminalEnvironment.write, "terminal write");
   const closeTerminalMutation = useAtomCommand(terminalEnvironment.close, "terminal close");
@@ -1044,7 +1045,13 @@ const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDra
         activeTerminalId={terminalUiState.activeTerminalId}
         terminalGroups={terminalUiState.terminalGroups}
         activeTerminalGroupId={terminalUiState.activeTerminalGroupId}
-        focusRequestId={focusRequestId + localFocusRequestId + (visible ? 1 : 0)}
+        // The visible term turns thread activation and drawer reveal into a
+        // focus request; those are automatic reveals, so the terminalAutoFocus
+        // setting gates them. Action-driven bumps (localFocusRequestId and the
+        // ChatView-level requests) stay ungated.
+        focusRequestId={
+          focusRequestId + localFocusRequestId + (visible && terminalAutoFocus ? 1 : 0)
+        }
         onSplitTerminal={splitTerminal}
         onSplitTerminalVertical={splitTerminalVertical}
         onNewTerminal={createNewTerminal}
@@ -1464,6 +1471,7 @@ function ChatViewContent(props: ChatViewProps) {
     useState<Record<string, number>>({});
   const shouldUseRightPanelSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const [terminalFocusRequestId, setTerminalFocusRequestId] = useState(0);
+  const terminalAutoFocus = useClientSettings((settings) => settings.terminalAutoFocus);
   const [pullRequestDialogState, setPullRequestDialogState] =
     useState<PullRequestDialogState | null>(null);
   const [terminalUiLaunchContext, setTerminalUiLaunchContext] =
@@ -5059,7 +5067,12 @@ function ChatViewContent(props: ChatViewProps) {
 
     if (!previous && current) {
       terminalUiOpenByThreadRef.current[activeThreadKey] = current;
-      setTerminalFocusRequestId((value) => value + 1);
+      // Opening the drawer is an automatic reveal, so the terminalAutoFocus
+      // setting gates its focus request. Closing always returns focus to the
+      // composer below, setting or not.
+      if (terminalAutoFocus) {
+        setTerminalFocusRequestId((value) => value + 1);
+      }
       return;
     } else if (previous && !current) {
       terminalUiOpenByThreadRef.current[activeThreadKey] = current;
@@ -5072,7 +5085,7 @@ function ChatViewContent(props: ChatViewProps) {
     }
 
     terminalUiOpenByThreadRef.current[activeThreadKey] = current;
-  }, [activeThreadKey, focusComposer, terminalUiState.terminalOpen]);
+  }, [activeThreadKey, focusComposer, terminalAutoFocus, terminalUiState.terminalOpen]);
 
   useEffect(() => {
     const handler = (event: globalThis.KeyboardEvent) => {
@@ -7226,7 +7239,11 @@ function ChatViewContent(props: ChatViewProps) {
             launchContext={
               mountedThreadKey === activeThreadKey ? (activeTerminalLaunchContext ?? null) : null
             }
-            focusRequestId={mountedThreadKey === activeThreadKey ? terminalFocusRequestId : 0}
+            // Passed unconditionally: swapping to 0 for inactive threads made
+            // the id jump on activation, which reads as a focus request. Hidden
+            // drawers cannot act on requests anyway - their viewports render
+            // with autoFocus false.
+            focusRequestId={terminalFocusRequestId}
             splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
             splitVerticalShortcutLabel={splitTerminalVerticalShortcutLabel ?? undefined}
             newShortcutLabel={newTerminalShortcutLabel ?? undefined}

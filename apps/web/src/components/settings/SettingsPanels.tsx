@@ -2327,7 +2327,7 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("terminal-auto-focus")}
-          description="Move focus into the terminal when it opens and when you switch to a thread whose terminal is open. When off, the terminal only takes focus when you click it."
+          description="Move focus into the terminal when it opens and when you switch to a thread whose terminal is open. When off, the terminal only takes focus when you interact with it directly, like clicking it or creating a terminal."
           resetAction={
             settings.terminalAutoFocus !== DEFAULT_UNIFIED_SETTINGS.terminalAutoFocus ? (
               <SettingResetButton
