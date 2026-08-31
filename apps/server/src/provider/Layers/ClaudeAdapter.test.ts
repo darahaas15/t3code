@@ -2605,7 +2605,6 @@ describe("ClaudeAdapterLive", () => {
           uuid: "tu",
         },
         { type: "system", subtype: "commands_changed", session_id: "session", uuid: "cc" },
-        { type: "system", subtype: "model_refusal_fallback", session_id: "session", uuid: "mrf" },
         { type: "system", subtype: "local_command_output", session_id: "session", uuid: "lco" },
         { type: "system", subtype: "plugin_install", session_id: "session", uuid: "pi" },
         { type: "system", subtype: "memory_recall", session_id: "session", uuid: "mr" },
@@ -2623,6 +2622,21 @@ describe("ClaudeAdapterLive", () => {
       ]) {
         harness.query.emit(message as unknown as SDKMessage);
       }
+      // Safety model-fallback notices DO surface as a warning row.
+      harness.query.emit({
+        type: "system",
+        subtype: "model_refusal_fallback",
+        trigger: "refusal",
+        direction: "retry",
+        original_model: "claude-fable-5",
+        fallback_model: "claude-opus-4-8",
+        request_id: "req_test",
+        api_refusal_category: "cyber",
+        api_refusal_explanation: null,
+        content: "Safeguards flagged this message. Switched to Opus 4.8.",
+        session_id: "session",
+        uuid: "mrf",
+      } as unknown as SDKMessage);
       // High-priority notifications DO surface as a warning row.
       harness.query.emit({
         type: "system",
@@ -2663,10 +2677,11 @@ describe("ClaudeAdapterLive", () => {
       yield* Effect.yieldNow;
 
       const warnings = runtimeEvents.filter((event) => event.type === "runtime.warning");
-      // Exactly one warning: the high-priority notification. Nothing else.
+      // Exactly two warnings: the model-fallback notice and the
+      // high-priority notification. Nothing else.
       assert.deepEqual(
         warnings.map((event) => event.payload.message),
-        ["context window nearly full"],
+        ["Safeguards flagged this message. Switched to Opus 4.8.", "context window nearly full"],
       );
       const sessionStates = runtimeEvents
         .filter((event) => event.type === "session.state.changed")
